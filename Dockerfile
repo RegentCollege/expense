@@ -1,39 +1,46 @@
-FROM php:7-apache
-MAINTAINER codyrigg
+FROM php:8-apache
+MAINTAINER ctucker
 
-RUN apt-get update && \
-    apt-get install -y vim \
-    curl \
-    unzip \
+RUN apt-get update && pecl install redis && apt-get install -y \
+    build-essential \
     libpng-dev \
-    libfreetype6-dev \
     libjpeg62-turbo-dev \
+    libfreetype6-dev \
+    locales \
+    zip \
+    jpegoptim optipng pngquant gifsicle \
+    vim \
+    unzip \
+    git \
+    curl \
+    default-mysql-client \
+    libzip-dev \
+    libonig-dev \
     zlib1g-dev \
     libicu-dev \
-    g++ \
-	libldap2-dev&& \
-    rm -rf /var/lib/apt/lists/* 
-	
-RUN docker-php-ext-configure intl \
-    && docker-php-ext-install intl
-
-RUN docker-php-ext-install -j$(nproc) mysqli pdo pdo_mysql \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd
+    g++ 
     
+# Clear cache
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install extensions
+RUN docker-php-ext-install mysqli pdo_mysql zip exif pcntl opcache bcmath tokenizer
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg
+RUN docker-php-ext-install gd && docker-php-ext-enable opcache redis
+RUN docker-php-ext-configure intl
+RUN docker-php-ext-install intl
+
 # Install composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-
-RUN mkdir /var/www/parking && chown www-data: /var/www/parking -R && \
-    chmod 0755 /var/www/parking -R
+    
+COPY ./config/expense.conf /etc/apache2/sites-available/expense.conf
+COPY ./config/expense.php.ini /etc/apache2/conf.d/expense.php.ini
+COPY start.sh /usr/local/bin/start
 	
-COPY ./config/parking.conf /etc/apache2/sites-available/parking.conf
-RUN mkdir -p /var/www/parking/current
+RUN mkdir -p /var/www/expense/current/public
 
-RUN a2ensite parking.conf && a2dissite 000-default.conf && a2enmod rewrite
+RUN a2ensite expense.conf && a2dissite 000-default.conf && chmod u+x /usr/local/bin/start && a2enmod rewrite
 
-WORKDIR /var/www/parking
+WORKDIR /var/www/expense
 
-EXPOSE 80
-
-CMD ["apache2-foreground"]
+CMD ["/usr/local/bin/start"]
